@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>The only bubble speech meme generator you will need</title>
+  <meta name="description" content="Generate memes with transparent speech bubbles instantly. Upload your image, carve in the bubble, and copy or download with one click.">
+  <meta name="keywords" content="meme generator, speech bubble meme, online meme maker, image editor">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta property="og:title" content="Bubble Speech Meme Generator">
+  <meta property="og:description" content="The only bubble speech meme generator you will need.">
+  <meta property="og:type" content="website">
+  <style>
+    :root {
+      --accent: #3b82f6; /* soft blue */
+    }
+    body { font-family: system-ui, sans-serif; text-align: center; margin: 2em; transition: background 0.3s, color 0.3s; }
+    body.light { background: #f4f4f4; color: #000; }
+    body.dark { background: #1e1e1e; color: #fff; }
+    h1 { font-size: 1.8em; margin-bottom: 1em; }
+    #dropzone {
+      border: 2px dashed var(--accent);
+      padding: 2em;
+      border-radius: 12px;
+      background: transparent;
+      cursor: pointer;
+      margin-bottom: 1em;
+      transition: background 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+    #dropzone:hover, #dropzone:focus {
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      background: rgba(59,130,246,0.05);
+    }
+    canvas {
+      max-width: 100%;
+      margin: 1em 0;
+      border: 1px solid currentColor;
+      border-radius: 12px;
+      background: #fff;
+    }
+    body.dark canvas {
+      border: 1px solid #000;
+      background: #1a1a1a;
+    }
+    button {
+      margin: 0.5em;
+      padding: 0.6em 1.2em;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 500;
+      transition: background 0.2s, transform 0.1s;
+    }
+    button:hover { background: #2563eb; transform: translateY(-1px); }
+    #toggleMode {
+      position: absolute;
+      top: 1em;
+      right: 1em;
+      background: transparent;
+      color: var(--accent);
+    }
+    .processing {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    .processing::after {
+      content: " (Processing...)";
+      font-size: 0.9em;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body class="dark">
+  <button id="toggleMode">Toggle Dark/Light</button>
+  <main>
+    <h1>The only bubble speech meme generator you will need</h1>
+
+    <section>
+      <div id="dropzone" tabindex="0">Drop an image/GIF/video here, click to upload, or paste with Ctrl+V</div>
+      <input type="file" id="fileInput" accept="image/*,video/*" hidden>
+    </section>
+
+    <section>
+      <canvas id="canvas" aria-label="Meme preview"></canvas>
+    </section>
+
+    <section>
+      <button id="copyBtn">Copy</button>
+      <button id="downloadBtn">Download</button>
+    </section>
+  </main>
+
+  <footer>
+    <p style="font-size:0.9em; opacity:0.7; margin-top:2em;">Made with ❤️ for meme creators</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/gh/jnordberg/gif.js/dist/gif.js"></script>
+  <script>
+    let gif = null
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const copyBtn = document.getElementById('copyBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const toggleModeBtn = document.getElementById('toggleMode');
+
+    let currentGif = null;
+    let isProcessing = false;
+
+    // Bubble speech SVG path (as Path2D)
+    const bubblePath = new Path2D("M -0.5,-0.5 C 532.833,-0.5 1066.17,-0.5 1599.5,-0.5C 1599.5,11.8333 1599.5,24.1667 1599.5,36.5C 1538.14,63.1198 1475.14,85.2865 1410.5,103C 1315.6,163.275 1220.93,223.775 1126.5,284.5C 1125.83,284.5 1125.17,284.5 1124.5,284.5C 1156.01,239.472 1188.01,194.806 1220.5,150.5C 1221.91,150.027 1222.57,149.027 1222.5,147.5C 1224.14,145.876 1223.8,144.876 1221.5,144.5C 944.641,189.472 667.975,188.306 391.5,141C 277.413,121.481 166.747,90.1473 59.5,47C 39.3589,38.0954 19.3589,28.9287 -0.5,19.5C -0.5,12.8333 -0.5,6.16667 -0.5,-0.5 Z");
+
+    function applyBubbleMask(canvas, ctx) {
+      const scale = canvas.width / 1600;
+      ctx.save();
+      ctx.scale(scale, scale);
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fill(bubblePath);
+      ctx.restore();
+    }
+
+    function handleImage(img) {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      applyBubbleMask(canvas, ctx);
+      currentGif = null;
+    }
+
+    async function handleGif(file) {
+      if (isProcessing) return;
+      isProcessing = true;
+      dropzone.classList.add('processing');
+
+      try {
+        // Create video element to extract frames
+        const video = document.createElement('video');
+        video.src = URL.createObjectURL(file);
+        video.muted = true;
+        
+        await new Promise(resolve => {
+          video.addEventListener('loadeddata', resolve, { once: true });
+        });
+
+        const frameCount = Math.min(Math.floor(video.duration * 10), 50); // Max 50 frames
+        const frames = [];
+        
+        // Extract frames
+        for (let i = 0; i < frameCount; i++) {
+          video.currentTime = (video.duration * i) / frameCount;
+          await new Promise(resolve => {
+            video.addEventListener('seeked', resolve, { once: true });
+          });
+
+          // Create canvas for this frame
+          const frameCanvas = document.createElement('canvas');
+          const frameCtx = frameCanvas.getContext('2d');
+          frameCanvas.width = video.videoWidth;
+          frameCanvas.height = video.videoHeight;
+          
+          frameCtx.drawImage(video, 0, 0);
+          applyBubbleMask(frameCanvas, frameCtx);
+          
+          frames.push({
+            canvas: frameCanvas,
+            delay: 100 // 100ms per frame
+          });
+        }
+
+        // Show first frame in preview
+        canvas.width = frames[0].canvas.width;
+        canvas.height = frames[0].canvas.height;
+        ctx.drawImage(frames[0].canvas, 0, 0);
+
+        currentGif = frames;
+        URL.revokeObjectURL(video.src);
+        
+      } catch (error) {
+        console.error('Error processing GIF/video:', error);
+        alert('Error processing file. Please try a different format.');
+      } finally {
+        isProcessing = false;
+        dropzone.classList.remove('processing');
+      }
+    }
+
+    async function handleVideo(file) {
+      await handleGif(file); // Same processing as GIF
+    }
+
+    function handleFile(file) {
+      if (file.type.startsWith('image/gif') || file.name.toLowerCase().endsWith('.gif')) {
+        handleGif(file);
+      } else if (file.type.startsWith('video/')) {
+        handleVideo(file);
+      } else if (file.type.startsWith('image/')) {
+        const img = new Image();
+        img.onload = () => handleImage(img);
+        img.src = URL.createObjectURL(file);
+      }
+    }
+
+    // Clipboard paste support
+    async function handlePaste(e) {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            handleFile(file);
+            break;
+          }
+        }
+      }
+    }
+
+    // Event listeners
+    dropzone.onclick = () => fileInput.click();
+
+    dropzone.ondragover = (e) => { 
+      e.preventDefault(); 
+      dropzone.style.background = 'rgba(59,130,246,0.1)'; 
+    };
+    
+    dropzone.ondragleave = () => { 
+      dropzone.style.background = 'transparent'; 
+    };
+    
+    dropzone.ondrop = (e) => {
+      e.preventDefault();
+      dropzone.style.background = 'transparent';
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    };
+
+    // Keyboard support for dropzone
+    dropzone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fileInput.click();
+      }
+    });
+
+    // Global paste support
+    document.addEventListener('paste', handlePaste);
+    dropzone.addEventListener('paste', handlePaste);
+
+    fileInput.onchange = (e) => {
+      if (e.target.files.length) handleFile(e.target.files[0]);
+    };
+
+    copyBtn.onclick = async () => {
+      if (currentGif) {
+        // For GIFs, copy first frame as static image
+        canvas.toBlob(blob => {
+          const item = new ClipboardItem({ 'image/png': blob });
+          navigator.clipboard.write([item]);
+        });
+      } else {
+        canvas.toBlob(blob => {
+          const item = new ClipboardItem({ 'image/png': blob });
+          navigator.clipboard.write([item]);
+        });
+      }
+    };
+
+    downloadBtn.onclick = () => {
+      if (currentGif) {
+        // Generate GIF
+        let gifLoading = fetch('https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js')
+          .then((response) => {
+            if (!response.ok)
+              throw new Error("Network response was not OK");
+            return response.blob();
+          })
+          .then(workerBlob => {
+            const gif = new GIF({
+              workerScript: URL.createObjectURL(workerBlob),
+              workers: 2,
+              quality: 10,
+              width: currentGif[0].canvas.width,
+              height: currentGif[0].canvas.height,
+              transparent: 0x00000000
+            })
+
+            currentGif.forEach(frame => {
+              gif.addFrame(frame.canvas, { delay: frame.delay });
+            })
+
+            gif.on('finished', function(blob) {
+              const link = document.createElement('a');
+              link.download = 'bubble-meme.gif';
+              link.href = URL.createObjectURL(blob);
+              link.click();
+            });
+
+            gif.render();
+          });
+      } else {
+        const link = document.createElement('a');
+        link.download = 'bubble-meme.png';
+        link.href = canvas.toDataURL();
+        link.click();
+      }
+    };
+
+    toggleModeBtn.onclick = () => {
+      document.body.classList.toggle('dark');
+      document.body.classList.toggle('light');
+    };
+  </script>
+</body>
+</html>
