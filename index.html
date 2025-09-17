@@ -97,6 +97,7 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/gh/jnordberg/gif.js/dist/gif.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gif-frames@1.0.1/dist/gif-frames.min.js"></script>
   <script>
     let gif = null
     const dropzone = document.getElementById('dropzone');
@@ -122,20 +123,50 @@
       ctx.restore();
     }
 
-    function handleImage(img) {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0);
-      applyBubbleMask(canvas, ctx);
-      currentGif = null;
+    // Common function to process frames and apply mask
+    async function processFrames(frames, maxFrames = 50) {
+      const processedFrames = [];
+      const framesToProcess = Math.min(frames.length, maxFrames);
+      
+      for (let i = 0; i < framesToProcess; i++) {
+        const frame = frames[i];
+        
+        // Create canvas for this frame
+        const frameCanvas = document.createElement('canvas');
+        const frameCtx = frameCanvas.getContext('2d');
+        frameCanvas.width = frame.width;
+        frameCanvas.height = frame.height;
+        
+        // Draw the frame image data
+        frameCtx.putImageData(frame.imageData, 0, 0);
+        
+        // Apply the bubble mask
+        applyBubbleMask(frameCanvas, frameCtx);
+        
+        processedFrames.push({
+          canvas: frameCanvas,
+          delay: frame.delay || 100
+        });
+      }
+      
+      return processedFrames;
     }
 
-    async function handleGif(file) {
+    // Common function to update preview with first frame
+    function updatePreview(processedFrames) {
+      if (processedFrames.length > 0) {
+        canvas.width = processedFrames[0].canvas.width;
+        canvas.height = processedFrames[0].canvas.height;
+        ctx.drawImage(processedFrames[0].canvas, 0, 0);
+        currentGif = processedFrames;
+      }
+    }
+
+    async function handleVideo(file) {
       if (isProcessing) return;
       isProcessing = true;
       dropzone.classList.add('processing');
-
+      
       try {
         // Create video element to extract frames
         const video = document.createElement('video');
@@ -145,42 +176,45 @@
         await new Promise(resolve => {
           video.addEventListener('loadeddata', resolve, { once: true });
         });
-
+        
         const frameCount = Math.min(Math.floor(video.duration * 10), 50); // Max 50 frames
         const frames = [];
         
-        // Extract frames
+        // Extract frames from video
         for (let i = 0; i < frameCount; i++) {
           video.currentTime = (video.duration * i) / frameCount;
           await new Promise(resolve => {
             video.addEventListener('seeked', resolve, { once: true });
           });
-
-          // Create canvas for this frame
-          const frameCanvas = document.createElement('canvas');
-          const frameCtx = frameCanvas.getContext('2d');
-          frameCanvas.width = video.videoWidth;
-          frameCanvas.height = video.videoHeight;
           
-          frameCtx.drawImage(video, 0, 0);
-          applyBubbleMask(frameCanvas, frameCtx);
+          // Create temporary canvas to extract frame data
+          const tempCanvas = document.createElement('canvas');
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCanvas.width = video.videoWidth;
+          tempCanvas.height = video.videoHeight;
+          
+          tempCtx.drawImage(video, 0, 0);
+          const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
           
           frames.push({
-            canvas: frameCanvas,
+            imageData: imageData,
+            width: tempCanvas.width,
+            height: tempCanvas.height,
             delay: 100 // 100ms per frame
           });
         }
-
-        // Show first frame in preview
-        canvas.width = frames[0].canvas.width;
-        canvas.height = frames[0].canvas.height;
-        ctx.drawImage(frames[0].canvas, 0, 0);
-
-        currentGif = frames;
+        
+        // Process all frames
+        const processedFrames = await processFrames(frames);
+        
+        // Update preview
+        updatePreview(processedFrames);
+        
+        // Clean up
         URL.revokeObjectURL(video.src);
         
       } catch (error) {
-        console.error('Error processing GIF/video:', error);
+        console.error('Error processing video:', error);
         alert('Error processing file. Please try a different format.');
       } finally {
         isProcessing = false;
@@ -188,9 +222,60 @@
       }
     }
 
-    async function handleVideo(file) {
-      await handleGif(file); // Same processing as GIF
+    // Enhanced GIF handling with proper frame extraction
+    async function handleGif(file) {
+      if (isProcessing) return;
+      isProcessing = true;
+      dropzone.classList.add('processing');
+      
+      try {
+        // Create URL for the file
+        const fileUrl = URL.createObjectURL(file);
+        
+        // Use gif-frames library to extract frames with cumulative option
+        const frameData = await gifFrames({ 
+          url: fileUrl, 
+          frames: 'all', 
+          outputType: 'canvas',
+          cumulative: true  // This composites frames properly
+        });
+        
+        const frames = [];
+        
+        // Process each frame from the GIF
+        for (let i = 0; i < frameData.length; i++) {
+          const frame = frameData[i];
+          const canvas = frame.getImage();
+          const ctx = canvas.getContext('2d');
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          
+          frames.push({
+            imageData: imageData,
+            width: canvas.width,
+            height: canvas.height,
+            delay: frame.frameInfo.delay * 10, // Convert centiseconds to milliseconds
+            isGifFrame: true // Flag to identify GIF frames
+          });
+        }
+        
+        // Process all frames with bubble mask
+        const processedFrames = await processFrames(frames);
+        
+        // Update preview
+        updatePreview(processedFrames);
+        
+        // Clean up
+        URL.revokeObjectURL(fileUrl);
+        
+      } catch (error) {
+        console.error('Error processing GIF:', error);
+        alert('Error processing GIF file. Please try a different format.');
+      } finally {
+        isProcessing = false;
+        dropzone.classList.remove('processing');
+      }
     }
+
 
     function handleFile(file) {
       if (file.type.startsWith('image/gif') || file.name.toLowerCase().endsWith('.gif')) {
