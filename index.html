@@ -108,8 +108,13 @@
     const downloadBtn = document.getElementById('downloadBtn');
     const toggleModeBtn = document.getElementById('toggleMode');
 
+    const MAX_FRAMES = 1000
+
+    let previewInterval = null;
     let currentGif = null;
     let isProcessing = false;
+
+    
 
     // Bubble speech SVG path (as Path2D)
     const bubblePath = new Path2D("M -0.5,-0.5 C 532.833,-0.5 1066.17,-0.5 1599.5,-0.5C 1599.5,11.8333 1599.5,24.1667 1599.5,36.5C 1538.14,63.1198 1475.14,85.2865 1410.5,103C 1315.6,163.275 1220.93,223.775 1126.5,284.5C 1125.83,284.5 1125.17,284.5 1124.5,284.5C 1156.01,239.472 1188.01,194.806 1220.5,150.5C 1221.91,150.027 1222.57,149.027 1222.5,147.5C 1224.14,145.876 1223.8,144.876 1221.5,144.5C 944.641,189.472 667.975,188.306 391.5,141C 277.413,121.481 166.747,90.1473 59.5,47C 39.3589,38.0954 19.3589,28.9287 -0.5,19.5C -0.5,12.8333 -0.5,6.16667 -0.5,-0.5 Z");
@@ -123,104 +128,219 @@
       ctx.restore();
     }
 
-    // Common function to process frames and apply mask
-    async function processFrames(frames, maxFrames = 50) {
+    async function processFrames(frames, maxFrames = MAX_FRAMES) {
+      console.log('[processFrames] Input frames:', frames.length);
       const processedFrames = [];
       const framesToProcess = Math.min(frames.length, maxFrames);
-      
+
       for (let i = 0; i < framesToProcess; i++) {
         const frame = frames[i];
-        
+
         // Create canvas for this frame
         const frameCanvas = document.createElement('canvas');
         const frameCtx = frameCanvas.getContext('2d');
         frameCanvas.width = frame.width;
         frameCanvas.height = frame.height;
-        
+
         // Draw the frame image data
         frameCtx.putImageData(frame.imageData, 0, 0);
-        
+
         // Apply the bubble mask
         applyBubbleMask(frameCanvas, frameCtx);
-        
+
+        // ⚠️ IMPORTANT: keep the original delay
         processedFrames.push({
           canvas: frameCanvas,
-          delay: frame.delay || 100
+          delay: frame.delay
         });
       }
-      
+
       return processedFrames;
     }
 
-    // Common function to update preview with first frame
     function updatePreview(processedFrames) {
-      if (processedFrames.length > 0) {
-        canvas.width = processedFrames[0].canvas.width;
-        canvas.height = processedFrames[0].canvas.height;
-        ctx.drawImage(processedFrames[0].canvas, 0, 0);
-        currentGif = processedFrames;
+      if (processedFrames.length === 0) return;
+
+      currentGif = processedFrames;
+      canvas.width = processedFrames[0].canvas.width;
+      canvas.height = processedFrames[0].canvas.height;
+
+      if (previewInterval) {
+        clearTimeout(previewInterval);
+        previewInterval = null;
       }
+
+      let frameIndex = 0;
+
+      function drawFrame() {
+        const frame = currentGif[frameIndex];
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(frame.canvas, 0, 0);
+
+        frameIndex = (frameIndex + 1) % currentGif.length;
+
+        // ✅ use actual delay, fallback to ~100ms if missing
+        const delay = frame.delay > 0 ? frame.delay : 100;
+
+        previewInterval = setTimeout(drawFrame, delay);
+      }
+
+      drawFrame();
     }
 
     async function handleVideo(file) {
       if (isProcessing) return;
       isProcessing = true;
       dropzone.classList.add('processing');
-      
+
       try {
-        // Create video element to extract frames
         const video = document.createElement('video');
         video.src = URL.createObjectURL(file);
         video.muted = true;
-        
-        await new Promise(resolve => {
-          video.addEventListener('loadeddata', resolve, { once: true });
+        video.playsInline = true;
+        video.crossOrigin = "anonymous";
+
+        await new Promise((resolve, reject) => {
+          const onMeta = () => { cleanup(); resolve(); };
+          const onErr = (e) => { cleanup(); reject(e); };
+          function cleanup() {
+            video.removeEventListener('loadedmetadata', onMeta);
+            video.removeEventListener('error', onErr);
+          }
+          video.addEventListener('loadedmetadata', onMeta, { once: true });
+          video.addEventListener('error', onErr, { once: true });
         });
-        
-        const frameCount = Math.min(Math.floor(video.duration * 10), 50); // Max 50 frames
+
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCanvas.width = video.videoWidth || 320;
+        tempCanvas.height = video.videoHeight || 180;
+
         const frames = [];
-        
-        // Extract frames from video
-        for (let i = 0; i < frameCount; i++) {
-          video.currentTime = (video.duration * i) / frameCount;
-          await new Promise(resolve => {
-            video.addEventListener('seeked', resolve, { once: true });
-          });
-          
-          // Create temporary canvas to extract frame data
-          const tempCanvas = document.createElement('canvas');
-          const tempCtx = tempCanvas.getContext('2d');
-          tempCanvas.width = video.videoWidth;
-          tempCanvas.height = video.videoHeight;
-          
-          tempCtx.drawImage(video, 0, 0);
+        let lastVideoTime = -1;
+        let stopped = false;
+
+        function captureFrame(mediaTime) {
+          if (lastVideoTime >= 0 && Math.abs(mediaTime - lastVideoTime) < 1e-3) return;
+
+          let delay;
+          if (lastVideoTime < 0) {
+            delay = 1000 / 30;
+          } else {
+            delay = Math.max(1, (mediaTime - lastVideoTime) * 1000);
+          }
+          lastVideoTime = mediaTime;
+
+          tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
           const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-          
+
           frames.push({
-            imageData: imageData,
+            imageData,
             width: tempCanvas.width,
             height: tempCanvas.height,
-            delay: 100 // 100ms per frame
+            delay
           });
         }
-        
-        // Process all frames
-        const processedFrames = await processFrames(frames);
-        
-        // Update preview
-        updatePreview(processedFrames);
-        
-        // Clean up
-        URL.revokeObjectURL(video.src);
-        
-      } catch (error) {
-        console.error('Error processing video:', error);
+
+        async function finishCapture(reason = "normal") {
+          if (stopped) return;
+          stopped = true;
+          try {
+            const processed = await processFrames(frames);
+            updatePreview(processed);
+          } finally {
+            URL.revokeObjectURL(video.src);
+            isProcessing = false;
+            dropzone.classList.remove('processing');
+          }
+        }
+
+        if (typeof video.requestVideoFrameCallback === 'function') {
+          console.log("[handleVideo] Using requestVideoFrameCallback API");
+
+          try { await video.play(); console.log("[handleVideo] Video playback started."); } catch (e) {
+            console.warn("[handleVideo] video.play() failed:", e);
+          }
+
+          const onFrame = (now, metadata) => {
+            const mediaTime = (metadata && metadata.mediaTime != null)
+              ? metadata.mediaTime
+              : video.currentTime;
+
+            captureFrame(mediaTime);
+
+            if (video.ended || frames.length >= MAX_FRAMES) {
+              finishCapture(video.ended ? "video ended" : "max frames");
+              return;
+            }
+
+            try {
+              video.requestVideoFrameCallback(onFrame);
+            } catch (err) {
+              console.error("[handleVideo] rVFC failed, falling back:", err);
+              startFallbackPoll();
+            }
+          };
+
+          video.requestVideoFrameCallback(onFrame);
+          video.addEventListener('ended', () => finishCapture("ended event"), { once: true });
+
+          setTimeout(() => {
+            if (!stopped) {
+              console.warn("[handleVideo] Safety timeout reached, finishing capture.");
+              finishCapture("safety timeout");
+            }
+          }, Math.max(20000, (video.duration || 10) * 1500));
+
+        } else {
+          console.log("[handleVideo] Using fallback polling capture");
+
+          try { await video.play(); console.log("[handleVideo] Video playback started (fallback)."); } catch (e) {
+            console.warn("[handleVideo] video.play() failed (fallback):", e);
+          }
+
+          let pollTimer = null;
+          const POLL_MS = 1000 / 60;
+
+          function startFallbackPoll() {
+            if (pollTimer) return;
+            pollTimer = setInterval(() => {
+              if (video.paused || video.ended || frames.length >= MAX_FRAMES) {
+                clearInterval(pollTimer);
+                finishCapture(video.ended ? "video ended" : "max frames");
+                return;
+              }
+              const mediaTime = video.currentTime;
+              if (lastVideoTime < 0 || (mediaTime - lastVideoTime) >= 0.008) {
+                captureFrame(mediaTime);
+              }
+            }, POLL_MS);
+          }
+
+          startFallbackPoll();
+          video.addEventListener('ended', () => {
+            if (pollTimer) clearInterval(pollTimer);
+            finishCapture("ended event");
+          }, { once: true });
+
+          setTimeout(() => {
+            if (!stopped) {
+              console.warn("[handleVideo] Safety timeout reached (fallback).");
+              if (pollTimer) clearInterval(pollTimer);
+              finishCapture("safety timeout");
+            }
+          }, Math.max(20000, (video.duration || 10) * 1500));
+        }
+
+      } catch (err) {
+        console.error('Error processing video:', err);
         alert('Error processing file. Please try a different format.');
-      } finally {
         isProcessing = false;
         dropzone.classList.remove('processing');
       }
     }
+
+
 
     // Enhanced GIF handling with proper frame extraction
     async function handleGif(file) {
@@ -355,12 +475,11 @@
     };
 
     downloadBtn.onclick = () => {
-      if (currentGif) {
-        // Generate GIF
-        let gifLoading = fetch('https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js')
-          .then((response) => {
-            if (!response.ok)
-              throw new Error("Network response was not OK");
+      if (currentGif && currentGif.length > 1) {
+        // Use the same processed frames from preview
+        fetch('https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js')
+          .then(response => {
+            if (!response.ok) throw new Error("Failed to fetch worker script");
             return response.blob();
           })
           .then(workerBlob => {
@@ -371,11 +490,11 @@
               width: currentGif[0].canvas.width,
               height: currentGif[0].canvas.height,
               transparent: 0x00000000
-            })
+            });
 
             currentGif.forEach(frame => {
               gif.addFrame(frame.canvas, { delay: frame.delay });
-            })
+            });
 
             gif.on('finished', function(blob) {
               const link = document.createElement('a');
@@ -385,8 +504,14 @@
             });
 
             gif.render();
+          })
+          .catch(err => {
+            console.error("GIF generation failed:", err);
+            alert("Could not generate GIF.");
           });
+
       } else {
+        // Just save PNG if static
         const link = document.createElement('a');
         link.download = 'bubble-meme.png';
         link.href = canvas.toDataURL();
