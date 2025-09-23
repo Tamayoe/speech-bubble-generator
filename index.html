@@ -61,15 +61,12 @@
       background: transparent;
       color: var(--accent);
     }
-    .processing {
-      opacity: 0.7;
-      pointer-events: none;
+    .progress {
+      border-radius:8px;
+      padding:8px;
     }
-    .processing::after {
-      content: " (Processing...)";
-      font-size: 0.9em;
-      opacity: 0.8;
-    }
+    body.light .progress { background: #ececec; color: #000; }
+    body.dark .progress { background: #2e2e2e; color: #fff; }
   </style>
 </head>
 <body class="dark">
@@ -83,6 +80,14 @@
     </section>
 
     <section>
+      <div id="progressContainer" style="width:100%;margin:1em auto;display:none;">
+        <div class="progress">
+          <div id="progressText" style="font-size:0.9rem;color:var(--accent);margin-bottom:6px;text-align:left;">&nbsp;</div>
+          <div style="background:#e5e7eb;border-radius:6px;height:10px;overflow:hidden;">
+            <div id="progressBar" style="height:100%;width:0%;background:var(--accent);transition:width 160ms linear;"></div>
+          </div>
+        </div>
+      </div>
       <canvas id="canvas" aria-label="Meme preview"></canvas>
     </section>
 
@@ -119,6 +124,36 @@
     // Bubble speech SVG path (as Path2D)
     const bubblePath = new Path2D("M -0.5,-0.5 C 532.833,-0.5 1066.17,-0.5 1599.5,-0.5C 1599.5,11.8333 1599.5,24.1667 1599.5,36.5C 1538.14,63.1198 1475.14,85.2865 1410.5,103C 1315.6,163.275 1220.93,223.775 1126.5,284.5C 1125.83,284.5 1125.17,284.5 1124.5,284.5C 1156.01,239.472 1188.01,194.806 1220.5,150.5C 1221.91,150.027 1222.57,149.027 1222.5,147.5C 1224.14,145.876 1223.8,144.876 1221.5,144.5C 944.641,189.472 667.975,188.306 391.5,141C 277.413,121.481 166.747,90.1473 59.5,47C 39.3589,38.0954 19.3589,28.9287 -0.5,19.5C -0.5,12.8333 -0.5,6.16667 -0.5,-0.5 Z");
 
+    const progressText = document.getElementById('progressText');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+
+    let gifReadyBlob = null;
+    let gifEncodingPromise = null;
+
+    copyBtn.disabled = true;
+    downloadBtn.disabled = true;
+
+    function setButtonsEnabled(enabled) {
+      copyBtn.disabled = !enabled;
+      downloadBtn.disabled = !enabled;
+    }
+
+    function setProgress(percent, label = '') {
+      if (!progressContainer) return;
+      progressContainer.style.display = 'block';
+      progressBar.style.width = Math.min(100, Math.max(0, percent)) + '%';
+      progressText.textContent = label;
+    }
+
+    function resetProgress() {
+      if (!progressContainer) return;
+      progressContainer.style.display = 'none';
+      progressBar.style.width = '0%';
+      progressText.textContent = '';
+    }
+
+
     function applyBubbleMask(canvas, ctx) {
       const scale = canvas.width / 1600;
       ctx.save();
@@ -129,37 +164,38 @@
     }
 
     async function processFrames(frames, maxFrames = MAX_FRAMES) {
-      console.log('[processFrames] Input frames:', frames.length);
       const processedFrames = [];
       const framesToProcess = Math.min(frames.length, maxFrames);
 
       for (let i = 0; i < framesToProcess; i++) {
         const frame = frames[i];
-
-        // Create canvas for this frame
         const frameCanvas = document.createElement('canvas');
-        const frameCtx = frameCanvas.getContext('2d');
+        const frameCtx = frameCanvas.getContext('2d', { willReadFrequently: true });
         frameCanvas.width = frame.width;
         frameCanvas.height = frame.height;
 
-        // Draw the frame image data
         frameCtx.putImageData(frame.imageData, 0, 0);
-
-        // Apply the bubble mask
         applyBubbleMask(frameCanvas, frameCtx);
 
-        // ⚠️ IMPORTANT: keep the original delay
-        processedFrames.push({
-          canvas: frameCanvas,
-          delay: frame.delay
-        });
+        processedFrames.push({ canvas: frameCanvas, delay: frame.delay });
+
+        // 0–50% → preview
+        setProgress(((i + 1) / framesToProcess) * 50, "Loading preview…");
+
+        if (i % 20 === 0) await new Promise(r => setTimeout(r));
       }
 
       return processedFrames;
     }
 
+
     function updatePreview(processedFrames) {
-      if (processedFrames.length === 0) return;
+      if (processedFrames.length === 0) {
+        return;
+      }
+
+      currentGif = processedFrames;
+      setButtonsEnabled(true);
 
       currentGif = processedFrames;
       canvas.width = processedFrames[0].canvas.width;
@@ -186,6 +222,15 @@
       }
 
       drawFrame();
+
+      // ✅ Phase 2 starts automatically in background
+      gifEncodingPromise = createGif(currentGif);
+      gifEncodingPromise.then(blob => {
+        gifReadyBlob = blob;
+      }).catch(err => {
+        console.error("Background GIF encoding failed:", err);
+        gifReadyBlob = null;
+      });
     }
 
     function handleImage(img) {
@@ -195,6 +240,7 @@
       ctx.drawImage(img, 0, 0);
       applyBubbleMask(canvas, ctx);
       currentGif = null;
+      setButtonsEnabled(true);
     }
 
     async function handleVideo(file) {
@@ -433,6 +479,71 @@
       }
     }
 
+    function createGif(frames) {
+      return new Promise((resolve, reject) => {
+        // Use the same processed frames from preview
+        return fetch('https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js')
+          .then(response => {
+            if (!response.ok) throw new Error("Failed to fetch worker script");
+            return response.blob();
+          })
+          .then(workerBlob => {
+            const gif = new GIF({
+              workerScript: URL.createObjectURL(workerBlob),
+              workers: 2,
+              quality: 10,
+              width: frames[0].canvas.width,
+              height: frames[0].canvas.height,
+              transparent: 0x00000000
+            });
+
+            frames.forEach((frame, index) => {
+              console.debug("canvas frame n°" + index)
+              gif.addFrame(frame.canvas, { delay: frame.delay });
+            });
+
+            gif.on('progress', p => {
+              // p is between 0–1 → map to 50–100%
+              setProgress(50 + p * 50, "Preparing file for download…");
+            });
+
+            gif.on('finished', blob => {
+              resetProgress();
+              resolve(blob);
+            });
+
+            gif.on('abort', () => reject(new Error('GIF generation aborted')));
+            gif.on('error', reject);
+
+
+            console.debug('gif render')
+            gif.render();
+          })
+      });
+    }
+
+    async function downloadGif() {
+      if (!currentGif) return;
+      setProgress(0, 'Preparing GIF');
+      setButtonsEnabled(false);
+
+      try {
+        const blob = await createGif(currentGif);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'meme.gif';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error("GIF generation failed:", err);
+        alert("Could not generate GIF.");
+      } finally {
+        resetProgress();
+        setButtonsEnabled(true);
+      }
+    }
+
     // Event listeners
     dropzone.onclick = () => fileInput.click();
 
@@ -482,50 +593,37 @@
       }
     };
 
-    downloadBtn.onclick = () => {
+    downloadBtn.onclick = async () => {
+      // Case 1: Animated (multi-frame)
       if (currentGif && currentGif.length > 1) {
-        // Use the same processed frames from preview
-        fetch('https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js')
-          .then(response => {
-            if (!response.ok) throw new Error("Failed to fetch worker script");
-            return response.blob();
-          })
-          .then(workerBlob => {
-            const gif = new GIF({
-              workerScript: URL.createObjectURL(workerBlob),
-              workers: 2,
-              quality: 10,
-              width: currentGif[0].canvas.width,
-              height: currentGif[0].canvas.height,
-              transparent: 0x00000000
-            });
+        if (!gifEncodingPromise) return;
 
-            currentGif.forEach((frame, index) => {
-              console.debug("canvas frame n°" + index)
-              gif.addFrame(frame.canvas, { delay: frame.delay });
-            });
+        setButtonsEnabled(false);
+        try {
+          // If encoding is still running, wait
+          const blob = gifReadyBlob || await gifEncodingPromise;
 
-            gif.on('finished', function(blob) {
-              const link = document.createElement('a');
-              link.download = 'bubble-meme.gif';
-              link.href = URL.createObjectURL(blob);
-              link.click();
-            });
-
-            console.debug('gif render')
-            gif.render();
-          })
-          .catch(err => {
-            console.error("GIF generation failed:", err);
-            alert("Could not generate GIF.");
-          });
-
-      } else {
-        // Just save PNG if static
-        const link = document.createElement('a');
-        link.download = 'bubble-meme.png';
-        link.href = canvas.toDataURL();
-        link.click();
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.download = 'bubble-meme.gif';
+          link.href = url;
+          link.click();
+          URL.revokeObjectURL(url);
+        } finally {
+          setButtonsEnabled(true);
+        }
+      }
+      // Case 2: Static (single frame or no animation)
+      else {
+        canvas.toBlob(blob => {
+          if (!blob) return;
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.download = 'bubble-meme.png';
+          link.href = url;
+          link.click();
+          URL.revokeObjectURL(url);
+        });
       }
     };
 
