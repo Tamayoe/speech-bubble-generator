@@ -114,7 +114,7 @@
     let currentGif = null;
     let isProcessing = false;
 
-    
+
 
     // Bubble speech SVG path (as Path2D)
     const bubblePath = new Path2D("M -0.5,-0.5 C 532.833,-0.5 1066.17,-0.5 1599.5,-0.5C 1599.5,11.8333 1599.5,24.1667 1599.5,36.5C 1538.14,63.1198 1475.14,85.2865 1410.5,103C 1315.6,163.275 1220.93,223.775 1126.5,284.5C 1125.83,284.5 1125.17,284.5 1124.5,284.5C 1156.01,239.472 1188.01,194.806 1220.5,150.5C 1221.91,150.027 1222.57,149.027 1222.5,147.5C 1224.14,145.876 1223.8,144.876 1221.5,144.5C 944.641,189.472 667.975,188.306 391.5,141C 277.413,121.481 166.747,90.1473 59.5,47C 39.3589,38.0954 19.3589,28.9287 -0.5,19.5C -0.5,12.8333 -0.5,6.16667 -0.5,-0.5 Z");
@@ -186,6 +186,15 @@
       }
 
       drawFrame();
+    }
+
+    function handleImage(img) {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      applyBubbleMask(canvas, ctx);
+      currentGif = null;
     }
 
     async function handleVideo(file) {
@@ -347,28 +356,27 @@
       if (isProcessing) return;
       isProcessing = true;
       dropzone.classList.add('processing');
-      
+
       try {
         // Create URL for the file
         const fileUrl = URL.createObjectURL(file);
-        
+
         // Use gif-frames library to extract frames with cumulative option
-        const frameData = await gifFrames({ 
-          url: fileUrl, 
-          frames: 'all', 
+        const frameData = await gifFrames({
+          url: fileUrl,
+          frames: 'all',
           outputType: 'canvas',
           cumulative: true  // This composites frames properly
         });
-        
+
         const frames = [];
-        
+
         // Process each frame from the GIF
-        for (let i = 0; i < frameData.length; i++) {
-          const frame = frameData[i];
+        for (const frame of frameData) {
           const canvas = frame.getImage();
           const ctx = canvas.getContext('2d');
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          
+
           frames.push({
             imageData: imageData,
             width: canvas.width,
@@ -377,16 +385,16 @@
             isGifFrame: true // Flag to identify GIF frames
           });
         }
-        
+
         // Process all frames with bubble mask
         const processedFrames = await processFrames(frames);
-        
+
         // Update preview
         updatePreview(processedFrames);
-        
+
         // Clean up
         URL.revokeObjectURL(fileUrl);
-        
+
       } catch (error) {
         console.error('Error processing GIF:', error);
         alert('Error processing GIF file. Please try a different format.');
@@ -428,15 +436,15 @@
     // Event listeners
     dropzone.onclick = () => fileInput.click();
 
-    dropzone.ondragover = (e) => { 
-      e.preventDefault(); 
-      dropzone.style.background = 'rgba(59,130,246,0.1)'; 
+    dropzone.ondragover = (e) => {
+      e.preventDefault();
+      dropzone.style.background = 'rgba(59,130,246,0.1)';
     };
-    
-    dropzone.ondragleave = () => { 
-      dropzone.style.background = 'transparent'; 
+
+    dropzone.ondragleave = () => {
+      dropzone.style.background = 'transparent';
     };
-    
+
     dropzone.ondrop = (e) => {
       e.preventDefault();
       dropzone.style.background = 'transparent';
@@ -492,7 +500,8 @@
               transparent: 0x00000000
             });
 
-            currentGif.forEach(frame => {
+            currentGif.forEach((frame, index) => {
+              console.debug("canvas frame n°" + index)
               gif.addFrame(frame.canvas, { delay: frame.delay });
             });
 
@@ -503,6 +512,7 @@
               link.click();
             });
 
+            console.debug('gif render')
             gif.render();
           })
           .catch(err => {
