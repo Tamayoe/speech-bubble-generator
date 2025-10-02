@@ -1,636 +1,564 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>The only bubble speech meme generator you will need</title>
-  <meta name="description" content="Generate memes with transparent speech bubbles instantly. Upload your image, carve in the bubble, and copy or download with one click.">
-  <meta name="keywords" content="meme generator, speech bubble meme, online meme maker, image editor">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta property="og:title" content="Bubble Speech Meme Generator">
-  <meta property="og:description" content="The only bubble speech meme generator you will need.">
-  <meta property="og:type" content="website">
-  <style>
-    :root {
-      --accent: #3b82f6; /* soft blue */
-    }
-    body { font-family: system-ui, sans-serif; text-align: center; margin: 2em; transition: background 0.3s, color 0.3s; }
-    body.light { background: #f4f4f4; color: #000; }
-    body.dark { background: #1e1e1e; color: #fff; }
-    h1 { font-size: 1.8em; margin-bottom: 1em; }
-    #dropzone {
-      border: 2px dashed var(--accent);
-      padding: 2em;
-      border-radius: 12px;
-      background: transparent;
-      cursor: pointer;
-      margin-bottom: 1em;
-      transition: background 0.2s, box-shadow 0.2s;
-      outline: none;
-    }
-    #dropzone:hover, #dropzone:focus {
-      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-      background: rgba(59,130,246,0.05);
-    }
-    canvas {
-      max-width: 100%;
-      margin: 1em 0;
-      border: 1px solid currentColor;
-      border-radius: 12px;
-      background: #fff;
-    }
-    body.dark canvas {
-      border: 1px solid #000;
-      background: #1a1a1a;
-    }
-    button {
-      margin: 0.5em;
-      padding: 0.6em 1.2em;
-      cursor: pointer;
-      border: none;
-      border-radius: 8px;
-      background: var(--accent);
-      color: #fff;
-      font-weight: 500;
-      transition: background 0.2s, transform 0.1s;
-    }
-    button:hover { background: #2563eb; transform: translateY(-1px); }
-    #toggleMode {
-      position: absolute;
-      top: 1em;
-      right: 1em;
-      background: transparent;
-      color: var(--accent);
-    }
-    .progress {
-      border-radius:8px;
-      padding:8px;
-    }
-    body.light .progress { background: #ececec; color: #000; }
-    body.dark .progress { background: #2e2e2e; color: #fff; }
-  </style>
+    <meta charset="UTF-8">
+    <title>The only bubble speech meme generator you will need</title>
+    <meta name="description" content="Generate memes with transparent speech bubbles instantly. Upload your image, carve in the bubble, and download with one click.">
+    <meta name="keywords" content="meme generator, speech bubble meme, online meme maker, image editor">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta property="og:title" content="Bubble Speech Meme Generator">
+    <meta property="og:description" content="The only bubble speech meme generator you will need.">
+    <meta property="og:type" content="website">
+    <style>
+        :root { --accent: #3b82f6; }
+        body { font-family: system-ui, sans-serif; text-align: center; margin: 2em; transition: background 0.3s, color 0.3s; }
+        body.light { background: #f4f4f4; color: #000; }
+        body.dark { background: #1e1e1e; color: #fff; }
+        h1 { font-size: 1.8em; margin-bottom: 1em; }
+        #dropzone { border: 2px dashed var(--accent); padding: 2em; border-radius: 12px; background: transparent; cursor: pointer; margin-bottom: 1em; transition: background 0.2s, box-shadow 0.2s; outline: none; }
+        #dropzone:hover, #dropzone:focus { box-shadow: 0 2px 6px rgba(0,0,0,0.15); background: rgba(59,130,246,0.05); }
+        .preview-wrap { max-width: 100%; margin: 1em 0; }
+        canvas, img.preview-img { max-width: 100%; border: 1px solid currentColor; border-radius: 12px; background: #fff; display:block; margin: 0 auto; }
+        body.dark canvas, body.dark img.preview-img { border: 1px solid #000; background: #1a1a1a; }
+        button { margin: 0.5em; padding: 0.6em 1.2em; cursor: pointer; border: none; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 500; transition: background 0.2s, transform 0.1s; }
+        button:hover { background: #2563eb; transform: translateY(-1px); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        #toggleMode { position: absolute; top: 1em; right: 1em; background: transparent; color: var(--accent); }
+        .progress { border-radius:8px; padding:8px; }
+        body.light .progress { background: #ececec; color: #000; }
+        body.dark .progress { background: #2e2e2e; color: #fff; }
+    </style>
 </head>
 <body class="dark">
-  <button id="toggleMode">Toggle Dark/Light</button>
-  <main>
+<button id="toggleMode">Toggle Dark/Light</button>
+<main>
     <h1>The only bubble speech meme generator you will need</h1>
 
     <section>
-      <div id="dropzone" tabindex="0">Drop an image/GIF/video here, click to upload, or paste with Ctrl+V</div>
-      <input type="file" id="fileInput" accept="image/*,video/*" hidden>
+        <div id="dropzone" tabindex="0">Drop an image/GIF/video here, click to upload, or paste with Ctrl+V</div>
+        <input type="file" id="fileInput" accept="image/*,video/*" hidden>
     </section>
 
-    <section>
-      <div id="progressContainer" style="width:100%;margin:1em auto;display:none;">
-        <div class="progress">
-          <div id="progressText" style="font-size:0.9rem;color:var(--accent);margin-bottom:6px;text-align:left;">&nbsp;</div>
-          <div style="background:#e5e7eb;border-radius:6px;height:10px;overflow:hidden;">
-            <div id="progressBar" style="height:100%;width:0%;background:var(--accent);transition:width 160ms linear;"></div>
-          </div>
+    <section class="preview-wrap" id="previewWrap">
+        <div id="progressContainer" style="width:100%;margin:1em auto;display:none;">
+            <div class="progress">
+                <div id="progressText" style="font-size:0.9rem;color:var(--accent);margin-bottom:6px;text-align:left;">&nbsp;</div>
+                <div style="background:#e5e7eb;border-radius:6px;height:10px;overflow:hidden;">
+                    <div id="progressBar" style="height:100%;width:0%;background:var(--accent);transition:width 160ms linear;"></div>
+                </div>
+            </div>
         </div>
-      </div>
-      <canvas id="canvas" aria-label="Meme preview"></canvas>
+
+        <canvas id="canvas" aria-label="Meme preview"></canvas>
     </section>
 
     <section>
-      <button id="copyBtn">Copy</button>
-      <button id="downloadBtn">Download</button>
+        <button id="downloadBtn">Download</button>
     </section>
-  </main>
+</main>
 
-  <footer>
+<footer>
     <p style="font-size:0.9em; opacity:0.7; margin-top:2em;">Made with ❤️ for meme creators</p>
-  </footer>
+</footer>
 
-  <script src="https://cdn.jsdelivr.net/gh/jnordberg/gif.js/dist/gif.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/gif-frames@1.0.1/dist/gif-frames.min.js"></script>
-  <script>
-    let gif = null
+<script src="https://cdn.jsdelivr.net/gh/jnordberg/gif.js/dist/gif.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gif-frames@1.0.1/dist/gif-frames.min.js"></script>
+<script>
+    // --- DOM refs ---
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('fileInput');
+    const previewWrap = document.getElementById('previewWrap');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    const copyBtn = document.getElementById('copyBtn');
     const downloadBtn = document.getElementById('downloadBtn');
     const toggleModeBtn = document.getElementById('toggleMode');
-
-    const MAX_FRAMES = 1000
-
-    let previewInterval = null;
-    let currentGif = null;
-    let isProcessing = false;
-
-
-
-    // Bubble speech SVG path (as Path2D)
-    const bubblePath = new Path2D("M -0.5,-0.5 C 532.833,-0.5 1066.17,-0.5 1599.5,-0.5C 1599.5,11.8333 1599.5,24.1667 1599.5,36.5C 1538.14,63.1198 1475.14,85.2865 1410.5,103C 1315.6,163.275 1220.93,223.775 1126.5,284.5C 1125.83,284.5 1125.17,284.5 1124.5,284.5C 1156.01,239.472 1188.01,194.806 1220.5,150.5C 1221.91,150.027 1222.57,149.027 1222.5,147.5C 1224.14,145.876 1223.8,144.876 1221.5,144.5C 944.641,189.472 667.975,188.306 391.5,141C 277.413,121.481 166.747,90.1473 59.5,47C 39.3589,38.0954 19.3589,28.9287 -0.5,19.5C -0.5,12.8333 -0.5,6.16667 -0.5,-0.5 Z");
 
     const progressText = document.getElementById('progressText');
     const progressContainer = document.getElementById('progressContainer');
     const progressBar = document.getElementById('progressBar');
 
+    const MAX_FRAMES = 1000;
+
+    let previewInterval = null;
+    let currentGif = null;          // array of { canvas, delay }
+    let isProcessing = false;
+
+    // For background encoding & swapping preview
     let gifReadyBlob = null;
     let gifEncodingPromise = null;
+    let previewImg = null;
+    let previewImgUrl = null;
 
-    copyBtn.disabled = true;
     downloadBtn.disabled = true;
 
     function setButtonsEnabled(enabled) {
-      copyBtn.disabled = !enabled;
-      downloadBtn.disabled = !enabled;
+        downloadBtn.disabled = !enabled;
     }
 
     function setProgress(percent, label = '') {
-      if (!progressContainer) return;
-      progressContainer.style.display = 'block';
-      progressBar.style.width = Math.min(100, Math.max(0, percent)) + '%';
-      progressText.textContent = label;
+        if (!progressContainer) return;
+        progressContainer.style.display = 'block';
+        progressBar.style.width = Math.min(100, Math.max(0, percent)) + '%';
+        progressText.textContent = label || '';
     }
 
     function resetProgress() {
-      if (!progressContainer) return;
-      progressContainer.style.display = 'none';
-      progressBar.style.width = '0%';
-      progressText.textContent = '';
+        if (!progressContainer) return;
+        progressContainer.style.display = 'none';
+        progressBar.style.width = '0%';
+        progressText.textContent = '';
     }
 
+    // Bubble speech SVG path (as Path2D)
+    const bubblePath = new Path2D("M -0.5,-0.5 C 532.833,-0.5 1066.17,-0.5 1599.5,-0.5C 1599.5,11.8333 1599.5,24.1667 1599.5,36.5C 1538.14,63.1198 1475.14,85.2865 1410.5,103C 1315.6,163.275 1220.93,223.775 1126.5,284.5C 1125.83,284.5 1125.17,284.5 1124.5,284.5C 1156.01,239.472 1188.01,194.806 1220.5,150.5C 1221.91,150.027 1222.57,149.027 1222.5,147.5C 1224.14,145.876 1223.8,144.876 1221.5,144.5C 944.641,189.472 667.975,188.306 391.5,141C 277.413,121.481 166.747,90.1473 59.5,47C 39.3589,38.0954 19.3589,28.9287 -0.5,19.5C -0.5,12.8333 -0.5,6.16667 -0.5,-0.5 Z");
 
-    function applyBubbleMask(canvas, ctx) {
-      const scale = canvas.width / 1600;
-      ctx.save();
-      ctx.scale(scale, scale);
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.fill(bubblePath);
-      ctx.restore();
+    function applyBubbleMask(canvasEl, ctxEl) {
+        const scale = canvasEl.width / 1600;
+        ctxEl.save();
+        ctxEl.scale(scale, scale);
+        ctxEl.globalCompositeOperation = 'destination-out';
+        ctxEl.fill(bubblePath);
+        ctxEl.restore();
     }
 
+    // We may swap canvas <-> img in DOM. Helpers:
+    function showGifPreview(blob) {
+        // Remove old previewImg if exists
+        if (previewImgUrl) {
+            URL.revokeObjectURL(previewImgUrl);
+            previewImgUrl = null;
+        }
+        // Create image element
+        const img = document.createElement('img');
+        img.className = 'preview-img';
+        img.alt = 'Preview GIF';
+        img.style.maxWidth = '100%';
+        img.style.display = 'block';
+
+        previewImgUrl = URL.createObjectURL(blob);
+        img.src = previewImgUrl;
+
+        // Replace canvas with img in DOM
+        if (canvas.parentNode) {
+            canvas.parentNode.replaceChild(img, canvas);
+        }
+        previewImg = img;
+
+        // Buttons remain enabled
+        setButtonsEnabled(true);
+        resetProgress();
+    }
+
+    function restoreCanvasIfNeeded() {
+        if (!previewImg) return;
+        // Put canvas back where image is
+        if (previewImg.parentNode) {
+            previewImg.parentNode.replaceChild(canvas, previewImg);
+        }
+        // clean up old img URL
+        if (previewImgUrl) {
+            URL.revokeObjectURL(previewImgUrl);
+            previewImgUrl = null;
+        }
+        previewImg = null;
+    }
+
+    // Convert extracted frames into processed canvases (apply bubble mask)
     async function processFrames(frames, maxFrames = MAX_FRAMES) {
-      const processedFrames = [];
-      const framesToProcess = Math.min(frames.length, maxFrames);
+        const processedFrames = [];
+        const framesToProcess = Math.min(frames.length, maxFrames);
 
-      for (let i = 0; i < framesToProcess; i++) {
-        const frame = frames[i];
-        const frameCanvas = document.createElement('canvas');
-        const frameCtx = frameCanvas.getContext('2d', { willReadFrequently: true });
-        frameCanvas.width = frame.width;
-        frameCanvas.height = frame.height;
+        for (let i = 0; i < framesToProcess; i++) {
+            const frame = frames[i];
 
-        frameCtx.putImageData(frame.imageData, 0, 0);
-        applyBubbleMask(frameCanvas, frameCtx);
+            // create canvas for this frame
+            const frameCanvas = document.createElement('canvas');
+            const frameCtx = frameCanvas.getContext('2d', { willReadFrequently: true });
+            frameCanvas.width = frame.width;
+            frameCanvas.height = frame.height;
 
-        processedFrames.push({ canvas: frameCanvas, delay: frame.delay });
+            frameCtx.putImageData(frame.imageData, 0, 0);
+            applyBubbleMask(frameCanvas, frameCtx);
 
-        // 0–50% → preview
-        setProgress(((i + 1) / framesToProcess) * 50, "Loading preview…");
+            processedFrames.push({ canvas: frameCanvas, delay: frame.delay });
 
-        if (i % 20 === 0) await new Promise(r => setTimeout(r));
-      }
+            // map progress to 0..50%
+            setProgress(((i + 1) / framesToProcess) * 50, 'Loading preview…');
 
-      return processedFrames;
+            // yield occasionally so UI keeps responsive
+            if (i % 20 === 0) await new Promise(r => setTimeout(r, 0));
+        }
+
+        return processedFrames;
     }
 
-
+    // Play preview from processed frames (canvas-based)
     function updatePreview(processedFrames) {
-      if (processedFrames.length === 0) {
-        return;
-      }
+        if (processedFrames.length === 0) {
+            setButtonsEnabled(false);
+            return;
+        }
 
-      currentGif = processedFrames;
-      setButtonsEnabled(true);
+        // If we had swapped to <img> from a previous run, restore the canvas so preview uses canvas animation
+        restoreCanvasIfNeeded();
 
-      currentGif = processedFrames;
-      canvas.width = processedFrames[0].canvas.width;
-      canvas.height = processedFrames[0].canvas.height;
+        currentGif = processedFrames;
+        setButtonsEnabled(true);
 
-      if (previewInterval) {
-        clearTimeout(previewInterval);
-        previewInterval = null;
-      }
+        canvas.width = processedFrames[0].canvas.width;
+        canvas.height = processedFrames[0].canvas.height;
 
-      let frameIndex = 0;
+        if (previewInterval) {
+            clearTimeout(previewInterval);
+            previewInterval = null;
+        }
 
-      function drawFrame() {
-        const frame = currentGif[frameIndex];
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(frame.canvas, 0, 0);
+        let frameIndex = 0;
+        function drawFrame() {
+            if (!currentGif || currentGif.length === 0) return;
+            const frame = currentGif[frameIndex];
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(frame.canvas, 0, 0);
 
-        frameIndex = (frameIndex + 1) % currentGif.length;
+            frameIndex = (frameIndex + 1) % currentGif.length;
 
-        // ✅ use actual delay, fallback to ~100ms if missing
-        const delay = frame.delay > 0 ? frame.delay : 100;
+            // use actual delay (ms)
+            const delay = (frame.delay > 0) ? frame.delay : 100;
+            previewInterval = setTimeout(drawFrame, delay);
+        }
 
-        previewInterval = setTimeout(drawFrame, delay);
-      }
+        drawFrame();
 
-      drawFrame();
-
-      // ✅ Phase 2 starts automatically in background
-      gifEncodingPromise = createGif(currentGif);
-      gifEncodingPromise.then(blob => {
-        gifReadyBlob = blob;
-      }).catch(err => {
-        console.error("Background GIF encoding failed:", err);
-        gifReadyBlob = null;
-      });
+        // Start background GIF encoding (phase 2)
+        gifEncodingPromise = createGif(currentGif)
+            .then(blob => {
+                gifReadyBlob = blob;
+                // show real gif in DOM so native copy works
+                try { showGifPreview(blob); } catch (e) { console.warn("Could not show gif preview:", e); }
+                return blob;
+            })
+            .catch(err => {
+                console.error("Background GIF encoding failed:", err);
+                gifReadyBlob = null;
+                gifEncodingPromise = null;
+                resetProgress();
+            });
     }
 
     function handleImage(img) {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0);
-      applyBubbleMask(canvas, ctx);
-      currentGif = null;
-      setButtonsEnabled(true);
+        // When loading a new image, restore canvas if previously replaced by <img>
+        restoreCanvasIfNeeded();
+
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        applyBubbleMask(canvas, ctx);
+        currentGif = null;
+        // There is a preview (static) so enable buttons
+        setButtonsEnabled(true);
+        // Cancel background gifPromise if any (we won't reuse it)
+        gifReadyBlob = null;
+        gifEncodingPromise = null;
+        resetProgress();
     }
 
+    // --- Video capture implementation (uses requestVideoFrameCallback if available) ---
     async function handleVideo(file) {
-      if (isProcessing) return;
-      isProcessing = true;
-      dropzone.classList.add('processing');
+        if (isProcessing) return;
+        isProcessing = true;
+        dropzone.classList.add('processing');
+        setButtonsEnabled(false);
+        setProgress(0, 'Loading preview…');
 
-      try {
-        const video = document.createElement('video');
-        video.src = URL.createObjectURL(file);
-        video.muted = true;
-        video.playsInline = true;
-        video.crossOrigin = "anonymous";
+        // If previous img was shown, restore canvas to animate onto
+        restoreCanvasIfNeeded();
 
-        await new Promise((resolve, reject) => {
-          const onMeta = () => { cleanup(); resolve(); };
-          const onErr = (e) => { cleanup(); reject(e); };
-          function cleanup() {
-            video.removeEventListener('loadedmetadata', onMeta);
-            video.removeEventListener('error', onErr);
-          }
-          video.addEventListener('loadedmetadata', onMeta, { once: true });
-          video.addEventListener('error', onErr, { once: true });
-        });
+        try {
+            const video = document.createElement('video');
+            video.src = URL.createObjectURL(file);
+            video.muted = true;
+            video.playsInline = true;
+            video.crossOrigin = "anonymous";
 
-        const tempCanvas = document.createElement('canvas');
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCanvas.width = video.videoWidth || 320;
-        tempCanvas.height = video.videoHeight || 180;
+            await new Promise((resolve, reject) => {
+                const onMeta = () => { cleanup(); resolve(); };
+                const onErr = (e) => { cleanup(); reject(e); };
+                function cleanup() {
+                    video.removeEventListener('loadedmetadata', onMeta);
+                    video.removeEventListener('error', onErr);
+                }
+                video.addEventListener('loadedmetadata', onMeta, { once: true });
+                video.addEventListener('error', onErr, { once: true });
+            });
 
-        const frames = [];
-        let lastVideoTime = -1;
-        let stopped = false;
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+            tempCanvas.width = video.videoWidth || 320;
+            tempCanvas.height = video.videoHeight || 180;
 
-        function captureFrame(mediaTime) {
-          if (lastVideoTime >= 0 && Math.abs(mediaTime - lastVideoTime) < 1e-3) return;
+            const frames = [];
+            let lastVideoTime = -1;
+            let stopped = false;
 
-          let delay;
-          if (lastVideoTime < 0) {
-            delay = 1000 / 30;
-          } else {
-            delay = Math.max(1, (mediaTime - lastVideoTime) * 1000);
-          }
-          lastVideoTime = mediaTime;
+            function captureFrame(mediaTime) {
+                if (lastVideoTime >= 0 && Math.abs(mediaTime - lastVideoTime) < 1e-3) return;
 
-          tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
-          const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                let delay;
+                if (lastVideoTime < 0) delay = 1000 / 30;
+                else delay = Math.max(1, (mediaTime - lastVideoTime) * 1000);
+                lastVideoTime = mediaTime;
 
-          frames.push({
-            imageData,
-            width: tempCanvas.width,
-            height: tempCanvas.height,
-            delay
-          });
-        }
+                tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+                const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
 
-        async function finishCapture(reason = "normal") {
-          if (stopped) return;
-          stopped = true;
-          try {
-            const processed = await processFrames(frames);
-            updatePreview(processed);
-          } finally {
-            URL.revokeObjectURL(video.src);
+                frames.push({ imageData, width: tempCanvas.width, height: tempCanvas.height, delay });
+            }
+
+            async function finishCapture(reason = "normal") {
+                if (stopped) return;
+                stopped = true;
+                try {
+                    // process frames
+                    const processed = await processFrames(frames);
+                    updatePreview(processed);
+                } finally {
+                    URL.revokeObjectURL(video.src);
+                    isProcessing = false;
+                    dropzone.classList.remove('processing');
+                    setProgress(50, 'Preparing file for download…');
+                }
+            }
+
+            if (typeof video.requestVideoFrameCallback === 'function') {
+                try { await video.play(); } catch (e) { /* ignore autoplay block */ }
+
+                const onFrame = (now, metadata) => {
+                    const mediaTime = (metadata && metadata.mediaTime != null) ? metadata.mediaTime : video.currentTime;
+                    captureFrame(mediaTime);
+
+                    if (video.ended || frames.length >= MAX_FRAMES) {
+                        finishCapture(video.ended ? "video ended" : "max frames");
+                        return;
+                    }
+
+                    try { video.requestVideoFrameCallback(onFrame); }
+                    catch (err) { console.error("rVFC failed:", err); startFallbackPoll(); }
+                };
+
+                video.requestVideoFrameCallback(onFrame);
+                video.addEventListener('ended', () => finishCapture("ended event"), { once: true });
+
+                setTimeout(() => {
+                    if (!stopped) { console.warn("Safety timeout reached, finishing capture."); finishCapture("safety timeout"); }
+                }, Math.max(20000, (video.duration || 10) * 1500));
+            } else {
+                // fallback polling
+                try { await video.play(); } catch (e) { /* ignore autoplay block */ }
+
+                let pollTimer = null;
+                const POLL_MS = 1000 / 60;
+
+                function startFallbackPoll() {
+                    if (pollTimer) return;
+                    pollTimer = setInterval(() => {
+                        if (video.paused || video.ended || frames.length >= MAX_FRAMES) {
+                            clearInterval(pollTimer);
+                            finishCapture(video.ended ? "video ended" : "max frames");
+                            return;
+                        }
+                        const mediaTime = video.currentTime;
+                        if (lastVideoTime < 0 || (mediaTime - lastVideoTime) >= 0.008) {
+                            captureFrame(mediaTime);
+                        }
+                    }, POLL_MS);
+                }
+
+                startFallbackPoll();
+                video.addEventListener('ended', () => {
+                    if (pollTimer) clearInterval(pollTimer);
+                    finishCapture("ended event");
+                }, { once: true });
+
+                setTimeout(() => {
+                    if (!stopped) {
+                        if (pollTimer) clearInterval(pollTimer);
+                        finishCapture("safety timeout");
+                    }
+                }, Math.max(20000, (video.duration || 10) * 1500));
+            }
+
+        } catch (err) {
+            console.error('Error processing video:', err);
+            alert('Error processing file. Please try a different format.');
             isProcessing = false;
             dropzone.classList.remove('processing');
-          }
+            resetProgress();
         }
-
-        if (typeof video.requestVideoFrameCallback === 'function') {
-          console.log("[handleVideo] Using requestVideoFrameCallback API");
-
-          try { await video.play(); console.log("[handleVideo] Video playback started."); } catch (e) {
-            console.warn("[handleVideo] video.play() failed:", e);
-          }
-
-          const onFrame = (now, metadata) => {
-            const mediaTime = (metadata && metadata.mediaTime != null)
-              ? metadata.mediaTime
-              : video.currentTime;
-
-            captureFrame(mediaTime);
-
-            if (video.ended || frames.length >= MAX_FRAMES) {
-              finishCapture(video.ended ? "video ended" : "max frames");
-              return;
-            }
-
-            try {
-              video.requestVideoFrameCallback(onFrame);
-            } catch (err) {
-              console.error("[handleVideo] rVFC failed, falling back:", err);
-              startFallbackPoll();
-            }
-          };
-
-          video.requestVideoFrameCallback(onFrame);
-          video.addEventListener('ended', () => finishCapture("ended event"), { once: true });
-
-          setTimeout(() => {
-            if (!stopped) {
-              console.warn("[handleVideo] Safety timeout reached, finishing capture.");
-              finishCapture("safety timeout");
-            }
-          }, Math.max(20000, (video.duration || 10) * 1500));
-
-        } else {
-          console.log("[handleVideo] Using fallback polling capture");
-
-          try { await video.play(); console.log("[handleVideo] Video playback started (fallback)."); } catch (e) {
-            console.warn("[handleVideo] video.play() failed (fallback):", e);
-          }
-
-          let pollTimer = null;
-          const POLL_MS = 1000 / 60;
-
-          function startFallbackPoll() {
-            if (pollTimer) return;
-            pollTimer = setInterval(() => {
-              if (video.paused || video.ended || frames.length >= MAX_FRAMES) {
-                clearInterval(pollTimer);
-                finishCapture(video.ended ? "video ended" : "max frames");
-                return;
-              }
-              const mediaTime = video.currentTime;
-              if (lastVideoTime < 0 || (mediaTime - lastVideoTime) >= 0.008) {
-                captureFrame(mediaTime);
-              }
-            }, POLL_MS);
-          }
-
-          startFallbackPoll();
-          video.addEventListener('ended', () => {
-            if (pollTimer) clearInterval(pollTimer);
-            finishCapture("ended event");
-          }, { once: true });
-
-          setTimeout(() => {
-            if (!stopped) {
-              console.warn("[handleVideo] Safety timeout reached (fallback).");
-              if (pollTimer) clearInterval(pollTimer);
-              finishCapture("safety timeout");
-            }
-          }, Math.max(20000, (video.duration || 10) * 1500));
-        }
-
-      } catch (err) {
-        console.error('Error processing video:', err);
-        alert('Error processing file. Please try a different format.');
-        isProcessing = false;
-        dropzone.classList.remove('processing');
-      }
     }
 
-
-
-    // Enhanced GIF handling with proper frame extraction
+    // --- GIF handling ---
     async function handleGif(file) {
-      if (isProcessing) return;
-      isProcessing = true;
-      dropzone.classList.add('processing');
+        if (isProcessing) return;
+        isProcessing = true;
+        dropzone.classList.add('processing');
+        setButtonsEnabled(false);
+        setProgress(0, 'Loading preview…');
 
-      try {
-        // Create URL for the file
-        const fileUrl = URL.createObjectURL(file);
+        // restore canvas if we swapped previously
+        restoreCanvasIfNeeded();
 
-        // Use gif-frames library to extract frames with cumulative option
-        const frameData = await gifFrames({
-          url: fileUrl,
-          frames: 'all',
-          outputType: 'canvas',
-          cumulative: true  // This composites frames properly
-        });
+        try {
+            const fileUrl = URL.createObjectURL(file);
 
-        const frames = [];
+            const frameData = await gifFrames({
+                url: fileUrl,
+                frames: 'all',
+                outputType: 'canvas',
+                cumulative: true
+            });
 
-        // Process each frame from the GIF
-        for (const frame of frameData) {
-          const canvas = frame.getImage();
-          const ctx = canvas.getContext('2d');
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const frames = [];
+            for (const frame of frameData) {
+                const c = frame.getImage();
+                const cctx = c.getContext('2d');
+                const imageData = cctx.getImageData(0, 0, c.width, c.height);
+                frames.push({ imageData, width: c.width, height: c.height, delay: (frame.frameInfo.delay || 10) * 10 });
+            }
 
-          frames.push({
-            imageData: imageData,
-            width: canvas.width,
-            height: canvas.height,
-            delay: frame.frameInfo.delay * 10, // Convert centiseconds to milliseconds
-            isGifFrame: true // Flag to identify GIF frames
-          });
+            const processedFrames = await processFrames(frames);
+            updatePreview(processedFrames);
+
+            URL.revokeObjectURL(fileUrl);
+        } catch (err) {
+            console.error('Error processing GIF:', err);
+            alert('Error processing GIF file. Please try a different format.');
+        } finally {
+            isProcessing = false;
+            dropzone.classList.remove('processing');
         }
-
-        // Process all frames with bubble mask
-        const processedFrames = await processFrames(frames);
-
-        // Update preview
-        updatePreview(processedFrames);
-
-        // Clean up
-        URL.revokeObjectURL(fileUrl);
-
-      } catch (error) {
-        console.error('Error processing GIF:', error);
-        alert('Error processing GIF file. Please try a different format.');
-      } finally {
-        isProcessing = false;
-        dropzone.classList.remove('processing');
-      }
     }
-
 
     function handleFile(file) {
-      if (file.type.startsWith('image/gif') || file.name.toLowerCase().endsWith('.gif')) {
-        handleGif(file);
-      } else if (file.type.startsWith('video/')) {
-        handleVideo(file);
-      } else if (file.type.startsWith('image/')) {
-        const img = new Image();
-        img.onload = () => handleImage(img);
-        img.src = URL.createObjectURL(file);
-      }
-    }
-
-    // Clipboard paste support
-    async function handlePaste(e) {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          const file = item.getAsFile();
-          if (file) {
-            handleFile(file);
-            break;
-          }
-        }
-      }
-    }
-
-    function createGif(frames) {
-      return new Promise((resolve, reject) => {
-        // Use the same processed frames from preview
-        return fetch('https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js')
-          .then(response => {
-            if (!response.ok) throw new Error("Failed to fetch worker script");
-            return response.blob();
-          })
-          .then(workerBlob => {
-            const gif = new GIF({
-              workerScript: URL.createObjectURL(workerBlob),
-              workers: 2,
-              quality: 10,
-              width: frames[0].canvas.width,
-              height: frames[0].canvas.height,
-              transparent: 0x00000000
-            });
-
-            frames.forEach((frame, index) => {
-              console.debug("canvas frame n°" + index)
-              gif.addFrame(frame.canvas, { delay: frame.delay });
-            });
-
-            gif.on('progress', p => {
-              // p is between 0–1 → map to 50–100%
-              setProgress(50 + p * 50, "Preparing file for download…");
-            });
-
-            gif.on('finished', blob => {
-              resetProgress();
-              resolve(blob);
-            });
-
-            gif.on('abort', () => reject(new Error('GIF generation aborted')));
-            gif.on('error', reject);
-
-
-            console.debug('gif render')
-            gif.render();
-          })
-      });
-    }
-
-    async function downloadGif() {
-      if (!currentGif) return;
-      setProgress(0, 'Preparing GIF');
-      setButtonsEnabled(false);
-
-      try {
-        const blob = await createGif(currentGif);
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'meme.gif';
-        a.click();
-        URL.revokeObjectURL(url);
-      } catch (err) {
-        console.error("GIF generation failed:", err);
-        alert("Could not generate GIF.");
-      } finally {
+        // reset any prior blob state when new file arrives
+        gifReadyBlob = null;
+        gifEncodingPromise = null;
         resetProgress();
-        setButtonsEnabled(true);
-      }
+        setButtonsEnabled(false);
+
+        if (file.type.startsWith('image/gif') || file.name.toLowerCase().endsWith('.gif')) {
+            handleGif(file);
+        } else if (file.type.startsWith('video/')) {
+            handleVideo(file);
+        } else if (file.type.startsWith('image/')) {
+            const img = new Image();
+            img.onload = () => handleImage(img);
+            img.src = URL.createObjectURL(file);
+        }
     }
 
-    // Event listeners
+    // --- GIF encoding (background) ---
+    function createGif(frames) {
+        // returns a Promise<Blob>
+        setProgress(50, 'Preparing file for download…');
+
+        return fetch('https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js')
+            .then(response => {
+                if (!response.ok) throw new Error("Failed to fetch worker script");
+                return response.blob();
+            })
+            .then(workerBlob => {
+                return new Promise((resolve, reject) => {
+                    const gif = new GIF({
+                        workerScript: URL.createObjectURL(workerBlob),
+                        workers: 2,
+                        quality: 10,
+                        width: frames[0].canvas.width,
+                        height: frames[0].canvas.height,
+                        transparent: 0x00000000
+                    });
+
+                    frames.forEach((frame, index) => {
+                        gif.addFrame(frame.canvas, { delay: frame.delay });
+                    });
+
+                    gif.on('progress', p => {
+                        setProgress(50 + p * 50, 'Preparing file for download…');
+                    });
+
+                    gif.on('finished', blob => {
+                        resetProgress();
+                        resolve(blob);
+                    });
+
+                    gif.on('abort', () => reject(new Error('GIF generation aborted')));
+                    gif.on('error', reject);
+
+                    gif.render();
+                });
+            });
+    }
+
+
+    // --- Events / UI wiring ---
     dropzone.onclick = () => fileInput.click();
+    dropzone.ondragover = (e) => { e.preventDefault(); dropzone.style.background = 'rgba(59,130,246,0.1)'; };
+    dropzone.ondragleave = () => { dropzone.style.background = 'transparent'; };
+    dropzone.ondrop = (e) => { e.preventDefault(); dropzone.style.background = 'transparent'; if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); };
 
-    dropzone.ondragover = (e) => {
-      e.preventDefault();
-      dropzone.style.background = 'rgba(59,130,246,0.1)';
-    };
+    dropzone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
 
-    dropzone.ondragleave = () => {
-      dropzone.style.background = 'transparent';
-    };
-
-    dropzone.ondrop = (e) => {
-      e.preventDefault();
-      dropzone.style.background = 'transparent';
-      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-    };
-
-    // Keyboard support for dropzone
-    dropzone.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        fileInput.click();
-      }
+    document.addEventListener('paste', (e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                const f = item.getAsFile();
+                if (f) { handleFile(f); break; }
+            }
+        }
     });
+    dropzone.addEventListener('paste', (e) => { /* same as above—global catches it already */ });
 
-    // Global paste support
-    document.addEventListener('paste', handlePaste);
-    dropzone.addEventListener('paste', handlePaste);
-
-    fileInput.onchange = (e) => {
-      if (e.target.files.length) handleFile(e.target.files[0]);
-    };
-
-    copyBtn.onclick = async () => {
-      if (currentGif) {
-        // For GIFs, copy first frame as static image
-        canvas.toBlob(blob => {
-          const item = new ClipboardItem({ 'image/png': blob });
-          navigator.clipboard.write([item]);
-        });
-      } else {
-        canvas.toBlob(blob => {
-          const item = new ClipboardItem({ 'image/png': blob });
-          navigator.clipboard.write([item]);
-        });
-      }
-    };
+    fileInput.onchange = (e) => { if (e.target.files.length) handleFile(e.target.files[0]); };
 
     downloadBtn.onclick = async () => {
-      // Case 1: Animated (multi-frame)
-      if (currentGif && currentGif.length > 1) {
-        if (!gifEncodingPromise) return;
-
-        setButtonsEnabled(false);
-        try {
-          // If encoding is still running, wait
-          const blob = gifReadyBlob || await gifEncodingPromise;
-
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.download = 'bubble-meme.gif';
-          link.href = url;
-          link.click();
-          URL.revokeObjectURL(url);
-        } finally {
-          setButtonsEnabled(true);
+        // Animated (multi-frame)
+        if (currentGif && currentGif.length > 1) {
+            if (!gifEncodingPromise) return;
+            setButtonsEnabled(false);
+            try {
+                const blob = gifReadyBlob || await gifEncodingPromise;
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.download = 'bubble-meme.gif';
+                link.href = url;
+                link.click();
+                URL.revokeObjectURL(url);
+            } finally {
+                setButtonsEnabled(true);
+            }
+        } else {
+            // Static PNG
+            canvas.toBlob(blob => {
+                if (!blob) return;
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.download = 'bubble-meme.png';
+                link.href = url;
+                link.click();
+                URL.revokeObjectURL(url);
+            });
         }
-      }
-      // Case 2: Static (single frame or no animation)
-      else {
-        canvas.toBlob(blob => {
-          if (!blob) return;
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.download = 'bubble-meme.png';
-          link.href = url;
-          link.click();
-          URL.revokeObjectURL(url);
-        });
-      }
     };
 
     toggleModeBtn.onclick = () => {
-      document.body.classList.toggle('dark');
-      document.body.classList.toggle('light');
+        document.body.classList.toggle('dark');
+        document.body.classList.toggle('light');
     };
-  </script>
+
+    // Expose a small helper to restore canvas (for dev)
+    window.__restoreCanvas = restoreCanvasIfNeeded;
+</script>
 </body>
 </html>
