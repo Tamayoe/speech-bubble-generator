@@ -10,7 +10,26 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      # ⚡️ Cache the "minify" binary to avoid re-downloading each run
+      - name: Cache minify binary
+        id: cache-minify
+        uses: actions/cache@v4
+        with:
+          path: ./minify
+          key: minify-binary-v2
+
+      # 🪄 Download the binary only if not found in cache
+      - name: Install minify
+        if: steps.cache-minify.outputs.cache-hit != 'true'
+        run: |
+          curl -L https://github.com/tdewolff/minify/releases/download/v2.24.3/minify_linux_amd64.tar.gz | tar -xz
+          chmod +x minify
+
+      - name: Minify static files
+        run: |
+          ./minify -r -o . .
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -19,6 +38,18 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Sync files to S3
+      # ☁️ Upload to S3 with smart caching headers
+      - name: Upload all assets to S3 (long cache)
         run: |
-          aws s3 sync . s3://${{ vars.S3_BUCKET }} --delete --exact-timestamps --exclude ".git/*" --exclude ".github/*"
+          aws s3 sync . s3://${{ vars.S3_BUCKET }} \
+            --delete --exact-timestamps \
+            --exclude ".git/*" \
+            --exclude ".github/*" \
+            --exclude "index.html" \
+            --cache-control "max-age=31536000,public"
+
+      # 🧠 Upload index.html separately with short cache (so updates appear immediately)
+      - name: Upload index.html (short cache)
+        run: |
+          aws s3 cp index.html s3://${{ vars.S3_BUCKET }}/index.html \
+            --cache-control "no-cache, must-revalidate"
